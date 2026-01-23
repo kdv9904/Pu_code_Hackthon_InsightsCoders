@@ -7,6 +7,7 @@ import org.pucodehackathon.backend.exception.vendor_exceptions.VendorNotFoundExc
 import org.pucodehackathon.backend.vendor.dto.VendorRegistrationRequestDto;
 import org.pucodehackathon.backend.vendor.dto.VendorRegistrationResponseDto;
 import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorResponseDto;
+import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorUserProfileDto;
 import org.pucodehackathon.backend.vendor.model.Vendor;
 import org.pucodehackathon.backend.vendor.model.VendorLocation;
 import org.pucodehackathon.backend.vendor.model.VerificationStatus;
@@ -102,6 +103,36 @@ public class VendorServiceImpl implements VendorService {
                 .orElseThrow(() -> new VendorNotFoundException("Vendor not found"));
 
         return mapToDto(vendor);
+    }
+
+    @Override
+    public VendorUserProfileDto getUserByVendorId(UUID loggedInUserId, UUID vendorId) {
+
+        // Vendor of logged-in user
+        Vendor loggedInVendor = vendorRepository.findByUserId(loggedInUserId)
+                .orElseThrow(() -> new AccessDeniedException("Vendor not found"));
+
+        // 🔒 Ensure vendor owns this vendorId
+        if (!loggedInVendor.getVendorId().equals(vendorId)) {
+            throw new AccessDeniedException("You are not allowed to access this vendor");
+        }
+
+        if (loggedInVendor.getVerificationStatus() != VerificationStatus.APPROVED) {
+            throw new AccessDeniedException("Vendor not approved");
+        }
+
+        User  user = userRepository.findById(loggedInVendor.getUserId())
+                .orElseThrow(() -> new IllegalStateException("User not found"));
+
+        return VendorUserProfileDto.builder()
+                .userId(user.getId())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .email(user.getEmail())
+                .phoneNumber(user.getPhoneNumber())
+                .isEnabled(user.isEnabled())
+                .isEmailVerified(user.isEmailVerified())
+                .build();
     }
 
     private VendorResponseDto mapToDto(Vendor vendor) {
