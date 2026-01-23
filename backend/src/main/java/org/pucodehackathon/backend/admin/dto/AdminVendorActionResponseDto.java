@@ -9,7 +9,6 @@ import java.util.UUID;
 @Data
 @Builder
 public class AdminVendorActionResponseDto {
-
     private UUID vendorId;
     private VerificationStatus verificationStatus;
     private String message;
