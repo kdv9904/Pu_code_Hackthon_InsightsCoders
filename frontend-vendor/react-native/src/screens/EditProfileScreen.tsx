@@ -95,9 +95,9 @@ export default function EditProfileScreen() {
             <Text style={styles.saveText}>Save Changes</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.logoutButton}>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={18} color="#ef4444" />
-            <Text style={styles.logoutText} onPress={handleLogout}>Logout</Text>
+            <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
