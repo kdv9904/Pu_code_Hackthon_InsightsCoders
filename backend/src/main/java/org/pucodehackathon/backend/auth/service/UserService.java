@@ -4,6 +4,7 @@ package org.pucodehackathon.backend.auth.service;
 import org.pucodehackathon.backend.auth.dto.ApiResponse;
 import org.pucodehackathon.backend.auth.dto.ResetPasswordRequest;
 import org.pucodehackathon.backend.auth.dto.UserDto;
+import org.pucodehackathon.backend.auth.dto.user.UpdateUserProfileDto;
 
 public interface UserService {
 
@@ -11,7 +12,7 @@ public interface UserService {
     ApiResponse getUserByEmail(String email);
 
     //update user
-    ApiResponse updateUser(UserDto userDto, String userId);
+    ApiResponse updateUser(UpdateUserProfileDto userDto, String userId);
 
     //delete user
     void deleteUser(String userId);
