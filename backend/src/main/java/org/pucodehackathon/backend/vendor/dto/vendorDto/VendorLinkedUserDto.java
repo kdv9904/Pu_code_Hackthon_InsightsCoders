@@ -6,7 +6,7 @@ import java.util.UUID;
 
 @Getter
 @Builder
-public class VendorUserProfileDto {
+public class VendorLinkedUserDto {
     private UUID userId;
     private String email;
     private String firstName;

@@ -3,8 +3,8 @@ package org.pucodehackathon.backend.vendor.service;
 import org.pucodehackathon.backend.auth.model.User;
 import org.pucodehackathon.backend.vendor.dto.VendorRegistrationRequestDto;
 import org.pucodehackathon.backend.vendor.dto.VendorRegistrationResponseDto;
+import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorLinkedUserDto;
 import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorResponseDto;
-import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorUserProfileDto;
 
 import java.util.UUID;
 
@@ -13,5 +13,5 @@ public interface VendorService {
     UUID getVendorIdByUser(User user);
     VendorResponseDto getMyVendorProfile(UUID userId);
     VendorResponseDto getVendorById(UUID vendorId);
-    VendorUserProfileDto getUserByVendorId(UUID loggedInUserId, UUID userId);
+    public VendorLinkedUserDto getUserByVendorId(UUID loggedInUserId, UUID vendorId);
 }

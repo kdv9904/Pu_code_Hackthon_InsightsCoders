@@ -6,8 +6,8 @@ import lombok.RequiredArgsConstructor;
 import org.pucodehackathon.backend.helper.UserPrincipal;
 import org.pucodehackathon.backend.vendor.dto.VendorRegistrationRequestDto;
 import org.pucodehackathon.backend.vendor.dto.VendorRegistrationResponseDto;
+import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorLinkedUserDto;
 import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorResponseDto;
-import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorUserProfileDto;
 import org.pucodehackathon.backend.vendor.service.impl.VendorServiceImpl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -54,11 +54,13 @@ public class VendorController {
         return ResponseEntity.ok(vendorService.getVendorById(vendorId));
     }
 
+
+
     @GetMapping("/{vendorId}/user")
-    public ResponseEntity<VendorUserProfileDto> getUserByVendorId(Authentication authentication, @PathVariable UUID vendorId) {
+    public ResponseEntity<VendorLinkedUserDto> getUserByVendorId(Authentication authentication, @PathVariable UUID vendorId) {
         UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
-        return ResponseEntity.ok(vendorService.getUserByVendorId(principal.getUser().getId(), vendorId)
-        );
+        return ResponseEntity.ok(vendorService.getUserByVendorId(principal.getUser().getId(),vendorId));
     }
+
 
 }

@@ -6,8 +6,8 @@ import org.pucodehackathon.backend.auth.repositories.UserRepository;
 import org.pucodehackathon.backend.exception.vendor_exceptions.VendorNotFoundException;
 import org.pucodehackathon.backend.vendor.dto.VendorRegistrationRequestDto;
 import org.pucodehackathon.backend.vendor.dto.VendorRegistrationResponseDto;
+import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorLinkedUserDto;
 import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorResponseDto;
-import org.pucodehackathon.backend.vendor.dto.vendorDto.VendorUserProfileDto;
 import org.pucodehackathon.backend.vendor.model.Vendor;
 import org.pucodehackathon.backend.vendor.model.VendorLocation;
 import org.pucodehackathon.backend.vendor.model.VerificationStatus;
@@ -105,14 +105,13 @@ public class VendorServiceImpl implements VendorService {
         return mapToDto(vendor);
     }
 
-    @Override
-    public VendorUserProfileDto getUserByVendorId(UUID loggedInUserId, UUID vendorId) {
 
+    @Override
+    public VendorLinkedUserDto getUserByVendorId(UUID loggedInUserId, UUID vendorId) {
         // Vendor of logged-in user
         Vendor loggedInVendor = vendorRepository.findByUserId(loggedInUserId)
                 .orElseThrow(() -> new AccessDeniedException("Vendor not found"));
 
-        // 🔒 Ensure vendor owns this vendorId
         if (!loggedInVendor.getVendorId().equals(vendorId)) {
             throw new AccessDeniedException("You are not allowed to access this vendor");
         }
@@ -121,19 +120,21 @@ public class VendorServiceImpl implements VendorService {
             throw new AccessDeniedException("Vendor not approved");
         }
 
-        User  user = userRepository.findById(loggedInVendor.getUserId())
+        User user = userRepository.findById(loggedInVendor.getUserId())
                 .orElseThrow(() -> new IllegalStateException("User not found"));
 
-        return VendorUserProfileDto.builder()
+        return VendorLinkedUserDto.builder()
                 .userId(user.getId())
+                .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
-                .email(user.getEmail())
                 .phoneNumber(user.getPhoneNumber())
                 .isEnabled(user.isEnabled())
                 .isEmailVerified(user.isEmailVerified())
                 .build();
     }
+
+
 
     private VendorResponseDto mapToDto(Vendor vendor) {
         return VendorResponseDto.builder()
