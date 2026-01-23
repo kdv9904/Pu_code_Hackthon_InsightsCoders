@@ -11,6 +11,7 @@ import org.pucodehackathon.backend.vendor.service.impl.VendorServiceImpl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -51,6 +52,5 @@ public class VendorController {
     public ResponseEntity<VendorResponseDto> getVendorById(@PathVariable UUID vendorId) {
         return ResponseEntity.ok(vendorService.getVendorById(vendorId));
     }
-
 
 }

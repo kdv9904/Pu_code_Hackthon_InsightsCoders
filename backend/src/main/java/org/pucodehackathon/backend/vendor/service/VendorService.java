@@ -12,4 +12,5 @@ public interface VendorService {
     UUID getVendorIdByUser(User user);
     VendorResponseDto getMyVendorProfile(UUID userId);
     VendorResponseDto getVendorById(UUID vendorId);
+
 }
