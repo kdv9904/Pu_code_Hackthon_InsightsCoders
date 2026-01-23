@@ -7,12 +7,12 @@ import {
   Image,
   TextInput,
   ScrollView,
+  Alert,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
-import { useAuth } from '../context/AuthContext';
-import Alert from 'react-native/Libraries/Alert/Alert';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext';
 
 export default function EditProfileScreen() {
   const navigation = useNavigation<any>();
@@ -22,28 +22,86 @@ export default function EditProfileScreen() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // ✅ Load user data from AsyncStorage
+  /* ✅ Load user data */
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const fName = await AsyncStorage.getItem('firstName');
-        const lName = await AsyncStorage.getItem('lastName');
-        const emailStored = await AsyncStorage.getItem('email');
-        const phoneStored = await AsyncStorage.getItem('phone');
-
-        setFirstName(fName || '');
-        setLastName(lName || '');
-        setEmail(emailStored || '');
-        setPhone(phoneStored || '');
+        setFirstName((await AsyncStorage.getItem('firstName')) || '');
+        setLastName((await AsyncStorage.getItem('lastName')) || '');
+        setEmail((await AsyncStorage.getItem('email')) || '');
+        setPhone((await AsyncStorage.getItem('phone')) || '');
       } catch (err) {
         console.log('Load profile error:', err);
       }
     };
-
     loadUser();
   }, []);
 
+  /* ✅ UPDATE PROFILE */
+  const handleSave = async () => {
+    try {
+      setLoading(true);
+
+      const token = await AsyncStorage.getItem('accessToken');
+      const userId = await AsyncStorage.getItem('userId');
+
+      if (!token || !userId) {
+        Alert.alert('Error', 'Unauthorized');
+        return;
+      }
+
+      // 🔥 BACKEND REQUIRED PAYLOAD
+      const payload = {
+        user: {
+          id: userId, // ✅ REQUIRED (NOT vendor)
+        },
+        firstName,
+        lastName,
+        phoneNumber: phone,
+      };
+
+      console.log('📤 Updating profile:', payload);
+
+      const res = await fetch(
+        `https://2a6717c6fa2a.ngrok-free.app/api/v1/users/${userId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const data = await res.json();
+      console.log('✅ Update response:', data);
+
+      if (!res.ok) {
+        Alert.alert('Error', data.message || 'Update failed');
+        return;
+      }
+
+      // ✅ Update local storage
+      await AsyncStorage.multiSet([
+        ['firstName', firstName],
+        ['lastName', lastName],
+        ['phone', phone],
+      ]);
+
+      Alert.alert('Success', 'Profile updated successfully');
+      navigation.goBack();
+    } catch (err) {
+      console.log('❌ Update profile error:', err);
+      Alert.alert('Error', 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* 🚪 Logout */
   const handleLogout = async () => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -68,7 +126,7 @@ export default function EditProfileScreen() {
       });
     } catch (error) {
       console.error('Logout error:', error);
-      Alert.alert('Error', 'Logout failed. Please try again.');
+      Alert.alert('Error', 'Logout failed');
     }
   };
 
@@ -84,7 +142,7 @@ export default function EditProfileScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Profile Image */}
+        {/* Avatar */}
         <View style={styles.profileSection}>
           <View style={styles.imageWrapper}>
             <Image
@@ -103,11 +161,22 @@ export default function EditProfileScreen() {
         <View style={styles.form}>
           <Input label="FIRST NAME" value={firstName} onChange={setFirstName} />
           <Input label="LAST NAME" value={lastName} onChange={setLastName} />
-          <Input label="EMAIL ADDRESS" value={email} onChange={setEmail} />
+          <Input
+            label="EMAIL ADDRESS"
+            value={email}
+            onChange={setEmail}
+            editable={false}
+          />
           <Input label="PHONE" value={phone} onChange={setPhone} />
 
-          <TouchableOpacity style={styles.saveButton}>
-            <Text style={styles.saveText}>Save Changes</Text>
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={handleSave}
+            disabled={loading}
+          >
+            <Text style={styles.saveText}>
+              {loading ? 'Saving...' : 'Save Changes'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -120,28 +189,35 @@ export default function EditProfileScreen() {
   );
 }
 
-/* Reusable Input */
+/* 🔹 Input Component */
 const Input = ({
   label,
   value,
   onChange,
+  editable = true,
 }: {
   label: string;
   value: string;
   onChange: (text: string) => void;
+  editable?: boolean;
 }) => (
   <View style={styles.inputGroup}>
     <Text style={styles.label}>{label}</Text>
     <TextInput
       value={value}
       onChangeText={onChange}
-      style={styles.input}
+      editable={editable}
+      style={[
+        styles.input,
+        !editable && { backgroundColor: '#e5e7eb', color: '#6b7280' },
+      ]}
       placeholder={label}
       placeholderTextColor="#94a3b8"
     />
   </View>
 );
 
+/* 🎨 Styles */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
 

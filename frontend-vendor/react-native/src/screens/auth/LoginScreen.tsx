@@ -68,6 +68,9 @@ export default function LoginScreen({ navigation }: any) {
         ['userId', data.data.user.id],
         ['firstName', data.data.user.firstName],
         ['lastName', data.data.user.lastName],
+        ['email', data.data.user.email],
+['phone', data.data.user.phone || ''],
+
       ]);
 
       setVerificationStatus(verificationStatus);
