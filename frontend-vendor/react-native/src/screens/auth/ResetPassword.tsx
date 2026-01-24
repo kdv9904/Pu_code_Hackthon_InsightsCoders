@@ -9,14 +9,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 
+import api from '../../services/api';
+
 export default function ResetPassword({ route, navigation }: any) {
   const { email } = route.params; // passed from ForgetPassScreen
 
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const API_BASE = 'https://388dd6d89cf6.ngrok-free.app/api/v1/auth';
 
   const handleResetPassword = async () => {
     if (!otp || !newPassword) {
@@ -27,24 +27,21 @@ export default function ResetPassword({ route, navigation }: any) {
     try {
       setLoading(true);
 
-      const response = await fetch(`${API_BASE}/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp, newPassword }),
+      const response = await api.post('/auth/reset-password', {
+        email,
+        otp,
+        newPassword,
       });
 
-     const text = await response.text();
+      // If successful
+      Alert.alert('Success', 'Password reset successfully', [
+        { text: 'Login', onPress: () => navigation.replace('Login') },
+      ]);
 
-if (response.ok) {
-  Alert.alert('Success', 'Password reset successfully', [
-    { text: 'Login', onPress: () => navigation.replace('Login') },
-  ]);
-} else {
-  Alert.alert('Error', text || 'Failed to reset password');
-}
-    } catch (error) {
+    } catch (error: any) {
       console.log(error);
-      Alert.alert('Error', 'Something went wrong. Try again.');
+      const msg = error.response?.data?.message || error.response?.data || 'Failed to reset password';
+      Alert.alert('Error', typeof msg === 'string' ? msg : 'Failed to reset password');
     } finally {
       setLoading(false);
     }

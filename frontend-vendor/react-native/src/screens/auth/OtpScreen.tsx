@@ -9,12 +9,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 
+import api from '../../services/api';
+
 export default function OtpScreen({ route, navigation }: any) {
   const { email } = route.params;
   const [otpCode, setOtpCode] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const API_BASE = 'https://388dd6d89cf6.ngrok-free.app/api/v1/auth';
 
   // Verify OTP
   const handleVerifyOtp = async () => {
@@ -26,27 +26,18 @@ export default function OtpScreen({ route, navigation }: any) {
     try {
       setLoading(true);
 
-      const response = await fetch(`${API_BASE}/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otpCode }),
-      });
+      await api.post('/auth/verify-otp', { email, otpCode });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        Alert.alert('Success', 'OTP verified successfully', [
-          {
-            text: 'Login',
-            onPress: () => navigation.replace('Login'), // or update context if using AuthProvider
-          },
-        ]);
-      } else {
-        Alert.alert('Error', data.message || 'Invalid or expired OTP');
-      }
-    } catch (error) {
+      Alert.alert('Success', 'OTP verified successfully', [
+        {
+          text: 'Login',
+          onPress: () => navigation.replace('Login'), // or update context if using AuthProvider
+        },
+      ]);
+    } catch (error: any) {
       console.log(error);
-      Alert.alert('Error', 'Something went wrong. Try again.');
+      const msg = error.response?.data?.message || 'Invalid or expired OTP';
+      Alert.alert('Error', msg);
     } finally {
       setLoading(false);
     }
@@ -58,20 +49,13 @@ export default function OtpScreen({ route, navigation }: any) {
       setLoading(true);
 
       // Call resend OTP API
-      const response = await fetch(`${API_BASE}/resend-otp/${encodeURIComponent(email)}`, {
-        method: 'POST',
-      });
+      await api.post(`/auth/resend-otp/${encodeURIComponent(email)}`);
 
-      const data = await response.json();
-
-      if (response.ok) {
-        Alert.alert('Success', `OTP resent to ${email}`);
-      } else {
-        Alert.alert('Error', data.message || 'Failed to resend OTP');
-      }
-    } catch (error) {
+      Alert.alert('Success', `OTP resent to ${email}`);
+    } catch (error: any) {
       console.log(error);
-      Alert.alert('Error', 'Something went wrong. Try again.');
+      const msg = error.response?.data?.message || 'Failed to resend OTP';
+      Alert.alert('Error', msg);
     } finally {
       setLoading(false);
     }

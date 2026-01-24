@@ -10,12 +10,14 @@ import CategoryProductsScreen from '../screens/CategoryProductsScreen';
 import AddProductScreen from '../screens/AddProductScreen';
 import AddProductImageScreen from '../screens/AddProductImageScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
+import OrderDetailsScreen from '../screens/OrderDetailsScreen';
 
 export type AppStackParamList = {
   Home: undefined;
   VendorDetails: { vendorId: number };
   OrderFlow: { vendorId: number; vendorName: string };
   UserAccount: undefined;
+  OrderDetails: { orderId: string };
   PopularDetails: undefined;
 
   CategoryProducts: {
@@ -23,9 +25,11 @@ export type AppStackParamList = {
     categoryName: string;
   };
   AddProduct: {
-  categoryId: number;
-  categoryName: string;
-};
+    categoryId: number;
+    categoryName: string;
+  };
+  AddProductImage: undefined;
+  EditProfile: undefined;
 
 };
 
@@ -49,6 +53,7 @@ export default function AppStack() {
   component={AddProductScreen}
 />
       <Stack.Screen name="AddProductImage" component={AddProductImageScreen} />
+      <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
 
     </Stack.Navigator>

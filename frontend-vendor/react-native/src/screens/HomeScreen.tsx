@@ -9,44 +9,62 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  Alert,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BottomNavigation from '../components/BottomNavigation';
 import { useNavigation } from '@react-navigation/native';
+import api from '../services/api';
+import { COLORS, FONTS, SHADOWS, SPACING } from '../constants/theme';
+
+const { width } = Dimensions.get('window');
 
 /* Initial Dummy Categories */
 const initialCategories = [
-  { id: 1, name: 'Burgers & Sides', count: 12, icon: '🍔', bg: '#fff7ed' },
-  { id: 2, name: 'Beverages', count: 8, icon: '🥤', bg: '#eff6ff' },
-  { id: 3, name: 'Desserts', count: 5, icon: '🍰', bg: '#fdf2f8' },
-  { id: 4, name: 'Vegan Options', count: 14, icon: '🥗', bg: '#ecfdf5' },
+  { id: 1, name: 'Burgers & Sides', count: 12, icon: 'fast-food-outline', bg: '#fff7ed' },
+  { id: 2, name: 'Beverages', count: 8, icon: 'beer-outline', bg: '#eff6ff' },
+  { id: 3, name: 'Desserts', count: 5, icon: 'ice-cream-outline', bg: '#fdf2f8' },
+  { id: 4, name: 'Vegan Options', count: 14, icon: 'nutrition-outline', bg: '#ecfdf5' },
 ];
 
-export default function HomeScreen() {
-  const navigation = useNavigation();
+type User = {
+  firstName: string;
+  lastName: string;
+};
 
-  const [isDarkMode, setIsDarkMode] = useState(false);
+export default function HomeScreen() {
+  const navigation = useNavigation<any>();
+
   const [showCreateCategory, setShowCreateCategory] = useState(false);
-  const [user, setUser] = useState(null);
-  const [categories, setCategories] = useState(initialCategories);
+  const [user, setUser] = useState<User | null>(null);
+  const [categories, setCategories] = useState<any[]>(initialCategories);
 
   const [categoryName, setCategoryName] = useState('');
   const [categoryDescription, setCategoryDescription] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const theme = isDarkMode ? darkTheme : lightTheme;
-
   /* Fetch user info */
   useEffect(() => {
     const fetchUser = async () => {
-      const firstName = 'Kirtan';
-      const lastName = 'Vyas';
-      setUser({ firstName, lastName });
+      try {
+        const firstName = await AsyncStorage.getItem('firstName');
+        const lastName = await AsyncStorage.getItem('lastName');
+        if (firstName) {
+          setUser({ 
+            firstName: firstName || 'Vendor', 
+            lastName: lastName || '' 
+          });
+        }
+      } catch (e) {
+        console.log('Error fetching user info', e);
+      }
     };
     fetchUser();
-  }, []);
+    fetchCategories();
+  },[]);
 
   const initials =
     ((user?.firstName?.[0] || '') + (user?.lastName?.[0] || '')).toUpperCase();
@@ -54,214 +72,153 @@ export default function HomeScreen() {
   /* Save Category API */
   const saveCategory = async () => {
     if (!categoryName.trim() || !categoryDescription.trim()) {
-      alert('Please fill both name and description');
+      Alert.alert('Error', 'Please fill both name and description');
       return;
     }
 
     setSaving(true);
 
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        alert('You are not logged in!');
-        return;
-      }
+      const response = await api.post('/vendor/categories', {
+        name: categoryName,
+        description: categoryDescription,
+      });
 
-      const response = await fetch(
-        'https://db73420c7ac3.ngrok-free.app/api/v1/vendor/categories',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`, // ✅ include token
-          },
-          body: JSON.stringify({
-            name: categoryName,
-            description: categoryDescription,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('Category created successfully!');
+      if (response.status === 200 || response.status === 201) {
+        Alert.alert('Success', 'Category created successfully!');
         setShowCreateCategory(false);
         setCategoryName('');
         setCategoryDescription('');
-
-        // Update local categories list for immediate UI
-        setCategories(prev => [
-          ...prev,
-          {
-            id: Math.random(),
-            name: categoryName,
-            count: 0,
-            icon: '📦',
-            bg: '#f0f0f0',
-          },
-        ]);
+        fetchCategories(); 
       } else {
-        alert(data.message || 'Failed to create category');
+        Alert.alert('Error', 'Failed to create category');
       }
     } catch (err) {
       console.error(err);
-      alert('Something went wrong!');
+      Alert.alert('Error', 'Something went wrong!');
     } finally {
       setSaving(false);
     }
   };
 
-useEffect(() => {
   const fetchCategories = async () => {
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) return;
+      const catRes = await api.get('/vendor/categories?page=0&size=10');
+      const catData = catRes.data;
 
-      // 1️⃣ Fetch categories
-      const catRes = await fetch(
-        'https://388dd6d89cf6.ngrok-free.app/api/v1/vendor/categories?page=0&size=10',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      if (!Array.isArray(catData.content)) return;
 
-      const catData = await catRes.json();
-      if (!catRes.ok || !Array.isArray(catData.content)) return;
-
-      // 2️⃣ Fetch products for each category and count via .length
       const mappedCategories = await Promise.all(
-        catData.content.map(async cat => {
-          const prodRes = await fetch(
-            `https://388dd6d89cf6.ngrok-free.app/api/v1/vendor/products?categoryId=${cat.categoryId}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
+        catData.content.map(async (cat: any) => {
+          try {
+            const prodRes = await api.get(
+              `/vendor/products?categoryId=${cat.categoryId}`
+            );
+            const prodData = prodRes.data;
 
-          const prodData = await prodRes.json();
-
-          return {
-            id: cat.categoryId,
-            name: cat.name,
-            count: Array.isArray(prodData.content)
-              ? prodData.content.length // ✅ COUNT USING .length
-              : 0,
-            icon: '📦',
-            bg: '#f0f0f0',
-          };
+            return {
+              id: cat.categoryId,
+              name: cat.name,
+              count: Array.isArray(prodData.content)
+                ? prodData.content.length
+                : 0,
+              icon: 'cube-outline', // default icon
+              bg: COLORS.card,
+            };
+          } catch (e) {
+             return {
+                id: cat.categoryId,
+                name: cat.name,
+                count: 0,
+                icon: 'cube-outline',
+                bg: COLORS.card,
+             };
+          }
         })
       );
-
       setCategories(mappedCategories);
     } catch (err) {
       console.error('Fetch categories error:', err);
     }
   };
 
-  fetchCategories();
-}, []);
-
-
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
-        {/* Header */}
-        <View style={[styles.header, { backgroundColor: theme.card }]}>
-          <View style={styles.profileRow}>
-            <TouchableOpacity
-  style={styles.avatar}
-  onPress={() => navigation.navigate('UserAccount')}
->
-  <Text style={styles.avatarText}>{initials}</Text>
-</TouchableOpacity>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      
+      {/* Header Section */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>Hello, {user?.firstName || 'Partner'} 👋</Text>
+          <Text style={styles.subGreeting}>Manage your inventory & orders</Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.profileBtn}
+          onPress={() => navigation.navigate('UserAccount')}
+        >
+          {initials ? (
+            <Text style={styles.profileInitial}>{initials}</Text>
+          ) : (
+            <Ionicons name="person" size={20} color={COLORS.white} />
+          )}
+        </TouchableOpacity>
+      </View>
 
-
-            <View>
-              <Text style={[styles.vendorName, { color: theme.text }]}>
-                {user?.firstName} {user?.lastName}
-              </Text>
-              <Text style={{ color: theme.subText, fontSize: 12 }}>
-                Vendor Partner
-              </Text>
-            </View>
-
-            <View style={styles.iconGroup}>
-              {/* Dark Mode Toggle */}
-              <TouchableOpacity
-                onPress={() => setIsDarkMode(p => !p)}
-                style={{ marginRight: 14 }}
-              >
-                <Ionicons
-                  name={isDarkMode ? 'sunny-outline' : 'moon-outline'}
-                  size={22}
-                  color={theme.icon}
-                />
-              </TouchableOpacity>
-
-              {/* Notification Bell */}
-              <TouchableOpacity style={styles.bellBtn}>
-                <Ionicons
-                  name="notifications-outline"
-                  size={22}
-                  color={theme.icon}
-                />
-                <View style={styles.notificationDot} />
-              </TouchableOpacity>
-            </View>
-          </View>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Stats / Hero Card (Optional Future Enhancement) */}
+        
+        {/* Categories Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Categories</Text>
+          <TouchableOpacity onPress={() => setShowCreateCategory(true)}>
+             <Text style={styles.actionLink}>+ Add New</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Categories */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>
-            Your Categories
-          </Text>
-
-          {categories.map(cat => (
+        <View style={styles.gridContainer}>
+          {categories.map((cat, index) => (
             <TouchableOpacity
-  key={cat.id}
-  style={[styles.categoryCard, { backgroundColor: theme.card }]}
-  onPress={() =>
-    navigation.navigate('CategoryProducts', {
-      categoryId: cat.id,
-      categoryName: cat.name,
-    })
-  }
->
-              <View style={[styles.iconBox, { backgroundColor: cat.bg }]}>
-                <Text style={styles.categoryIcon}>{cat.icon}</Text>
+              key={cat.id || index}
+              style={styles.categoryCard}
+              activeOpacity={0.8}
+              onPress={() =>
+                navigation.navigate('CategoryProducts', {
+                  categoryId: cat.id,
+                  categoryName: cat.name,
+                })
+              }
+            >
+              <View style={[styles.iconBox, { backgroundColor: COLORS.primaryLight }]}>
+                <Ionicons 
+                  name={typeof cat.icon === 'string' && cat.icon.includes('-') ? cat.icon : 'cube-outline'} 
+                  size={24} 
+                  color={COLORS.primary} 
+                />
               </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.categoryName, { color: theme.text }]}>
-                  {cat.name}
-                </Text>
-                <Text style={{ color: theme.subText, fontSize: 12 }}>
-                  {cat.count} Products
-                </Text>
-              </View>
-
-              <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
+              <Text style={styles.categoryName} numberOfLines={1}>{cat.name}</Text>
+              <Text style={styles.productCount}>{cat.count} Products</Text>
             </TouchableOpacity>
           ))}
+          
+          {/* Add Category Card (as part of grid) */}
+          <TouchableOpacity
+            style={[styles.categoryCard, styles.addCategoryCard]}
+            activeOpacity={0.8}
+            onPress={() => setShowCreateCategory(true)}
+          >
+            <View style={[styles.iconBox, { backgroundColor: COLORS.background }]}>
+              <Ionicons name="add" size={28} color={COLORS.subText} />
+            </View>
+            <Text style={[styles.categoryName, { color: COLORS.subText }]}>Create New</Text>
+          </TouchableOpacity>
         </View>
+
       </ScrollView>
 
-      {/* Create Category Button */}
-      <TouchableOpacity
-        style={styles.createCategoryBtn}
-        onPress={() => setShowCreateCategory(true)}
-      >
-        <Ionicons name="add" size={22} color="#fff" />
-        <Text style={styles.createCategoryText}>Create New Category</Text>
-      </TouchableOpacity>
-
-      {/* Modal */}
+      {/* Modal - Create Category */}
       <Modal
         transparent
         animationType="slide"
@@ -276,40 +233,40 @@ useEffect(() => {
               <View style={styles.dragBar} />
 
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Create New Category</Text>
+                <Text style={styles.modalTitle}>New Category</Text>
                 <TouchableOpacity onPress={() => setShowCreateCategory(false)}>
-                  <Ionicons name="close" size={22} color="#64748b" />
+                  <Ionicons name="close-circle" size={28} color={COLORS.subText} />
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.label}>Category Name</Text>
+              <Text style={styles.label}>Name</Text>
               <TextInput
-                placeholder="e.g. Fresh Vegetables"
-                placeholderTextColor="#94a3b8"
+                placeholder="e.g. Italian Pizzas"
+                placeholderTextColor={COLORS.subText}
                 style={styles.input}
                 value={categoryName}
                 onChangeText={setCategoryName}
               />
 
-              <Text style={styles.label}>Category Description</Text>
+              <Text style={styles.label}>Description</Text>
               <TextInput
-                placeholder="Briefly describe the types of items in this category..."
-                placeholderTextColor="#94a3b8"
-                style={[styles.input, { height: 90 }]}
+                placeholder="Describe this category..."
+                placeholderTextColor={COLORS.subText}
+                style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
                 multiline
                 value={categoryDescription}
                 onChangeText={setCategoryDescription}
               />
 
-              <TouchableOpacity style={styles.saveBtn} onPress={saveCategory}>
+              <TouchableOpacity 
+                style={styles.saveBtn} 
+                onPress={saveCategory}
+                disabled={saving}
+              >
                 <Text style={styles.saveText}>
-                  {saving ? 'Saving...' : 'Save Category ✓'}
+                  {saving ? 'Creating...' : 'Create Category'}
                 </Text>
               </TouchableOpacity>
-
-              <Text style={styles.helperText}>
-                After saving, you can start adding products to this category immediately from the inventory.
-              </Text>
             </View>
           </KeyboardAvoidingView>
         </View>
@@ -320,150 +277,173 @@ useEffect(() => {
   );
 }
 
-/* Themes */
-const lightTheme = {
-  bg: '#f8fafc',
-  card: '#ffffff',
-  text: '#0f172a',
-  subText: '#64748b',
-  icon: '#0f172a',
-};
-
-const darkTheme = {
-  bg: '#020617',
-  card: '#020617',
-  text: '#f8fafc',
-  subText: '#94a3b8',
-  icon: '#f8fafc',
-};
-
-/* Styles */
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-
-  header: { padding: 16 },
-  profileRow: { flexDirection: 'row', alignItems: 'center' },
-
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#22c55e',
+  container: { 
+    flex: 1, 
+    backgroundColor: COLORS.background 
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.l,
+    paddingTop: Platform.OS === 'android' ? SPACING.l : 60,
+    paddingBottom: SPACING.m,
+    backgroundColor: COLORS.white,
+    // Add subtle shadow if needed, keeping it clean for now
+  },
+  greeting: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  subGreeting: {
+    fontSize: 14,
+    color: COLORS.subText,
+    marginTop: 2,
+  },
+  profileBtn: {
+    width: 45,
+    height: 45,
+    borderRadius: 25,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    ...SHADOWS.light,
+  },
+  profileInitial: {
+    color: COLORS.white,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  
+  scrollContent: {
+    paddingHorizontal: SPACING.l,
+    paddingBottom: 100, // Space for Bottom Nav
+    paddingTop: SPACING.m,
   },
 
-  avatarText: { color: '#fff', fontWeight: '700' },
-  vendorName: { fontSize: 16, fontWeight: '700' },
-  iconGroup: {
+  sectionHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginLeft: 'auto',
-    gap: 14,
+    marginBottom: SPACING.m,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  actionLink: {
+    color: COLORS.primary,
+    fontWeight: '600',
+    fontSize: 14,
   },
 
-  bellBtn: { position: 'relative' },
-  notificationDot: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ef4444',
+  /* Grid Layout for Categories */
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between', // Pushes items apart
   },
-
-  section: { padding: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
-
   categoryCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 14,
-    marginBottom: 12,
+    width: (width - (SPACING.l * 2) - SPACING.m) / 2, // (Total Width - Padding - Gap) / 2
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: SPACING.m,
+    marginBottom: SPACING.m,
+    ...SHADOWS.light,
+    alignItems: 'flex-start',
   },
-
+  addCategoryCard: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   iconBox: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginBottom: SPACING.s,
   },
-
-  categoryIcon: { fontSize: 22 },
-  categoryName: { fontSize: 15, fontWeight: '700' },
-
-  createCategoryBtn: {
-    position: 'absolute',
-    bottom: 80,
-    left: 16,
-    right: 16,
-    backgroundColor: '#22c55e',
-    paddingVertical: 14,
-    borderRadius: 14,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-
-  createCategoryText: {
-    color: '#fff',
+  categoryName: {
     fontSize: 15,
     fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  productCount: {
+    fontSize: 12,
+    color: COLORS.subText,
   },
 
+  /* Modal Styles */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-
   modalContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 20,
+    padding: SPACING.l,
+    ...SHADOWS.strong,
   },
-
   dragBar: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: COLORS.border,
     alignSelf: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.l,
   },
-
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.l,
   },
-
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#0f172a' },
-  label: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 6, marginTop: 12 },
-  input: { backgroundColor: '#f8fafc', borderRadius: 12, padding: 14, fontSize: 14, color: '#0f172a' },
-
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: SPACING.s,
+    marginTop: SPACING.s,
+  },
+  input: {
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: SPACING.m,
+    fontSize: 15,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   saveBtn: {
-    backgroundColor: '#22c55e',
-    paddingVertical: 14,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.m,
     borderRadius: 14,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: SPACING.xl,
+    ...SHADOWS.medium,
   },
-
-  saveText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-
-  helperText: {
-    marginTop: 12,
-    fontSize: 12,
-    color: '#64748b',
-    textAlign: 'center',
+  saveText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
+

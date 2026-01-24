@@ -9,42 +9,36 @@ import {
   ActivityIndicator,
 } from 'react-native';
 
+import api from '../../services/api';
+
 export default function ForgetPassScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const API_BASE = 'https://388dd6d89cf6.ngrok-free.app/api/v1/auth';
-
   const handleSendOtp = async () => {
-  if (!email) {
-    Alert.alert('Error', 'Please enter your email');
-    return;
-  }
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email');
+      return;
+    }
 
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const response = await fetch(`${API_BASE}/forgot-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
+      const response = await api.post('/auth/forgot-password', { email });
+      // const data = response.data; // usually plain text or json
 
-    const text = await response.text();
-
-    if (response.ok) {
+      // Since axios resolves promises on 2xx status code
       Alert.alert('Success','OTP sent successfully');
       navigation.navigate('ResetPassword', { email });
-    } else {
-      Alert.alert('Error', text || 'Failed to send OTP');
+
+    } catch (error: any) {
+      console.log(error);
+      const msg = error.response?.data?.message || error.response?.data || 'Failed to send OTP';
+      Alert.alert('Error', typeof msg === 'string' ? msg : 'Failed to send OTP');
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.log(error);
-    Alert.alert('Error', 'Something went wrong. Try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
 
   return (

@@ -12,6 +12,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import api from '../services/api';
+
 export default function AddProductScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -33,32 +35,16 @@ export default function AddProductScreen() {
 
     try {
       setLoading(true);
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) throw new Error('User not authenticated');
+      
+      const response = await api.post('/vendor/products', {
+        categoryId,
+        name,
+        description,
+        price: Number(price),
+        stock: Number(stock),
+      });
 
-      const res = await fetch(
-        'https://388dd6d89cf6.ngrok-free.app/api/v1/vendor/products',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            categoryId,
-            name,
-            description,
-            price: Number(price),
-            stock: Number(stock),
-          }),
-        }
-      );
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || 'Product creation failed');
-      }
+      const data = response.data;
 
       const productId = data.productId; // ✅ productId from backend
 
@@ -69,7 +55,8 @@ export default function AddProductScreen() {
         categoryName,
       });
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      const msg = err.response?.data?.message || err.message || 'Product creation failed';
+      Alert.alert('Error', msg);
     } finally {
       setLoading(false);
     }

@@ -11,7 +11,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../services/api';
 
 export default function AddProductImageScreen() {
   const navigation = useNavigation<any>();
@@ -19,10 +19,9 @@ export default function AddProductImageScreen() {
   const { categoryId, categoryName, productId } = route.params;
   
   useEffect(() => {
-  console.log('Route params:', route.params);
-  console.log('Product ID:', productId);
-}, []);
-// ✅ productId from first screen
+    console.log('Route params:', route.params);
+    console.log('Product ID:', productId);
+  }, []);
 
   const [image, setImage] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -50,36 +49,35 @@ export default function AddProductImageScreen() {
 
     try {
       setLoading(true);
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) throw new Error('User not authenticated');
 
       const formData = new FormData();
       formData.append('file', {
-  uri: image.uri,
-  name: 'product.jpg',
-  type: 'image/jpeg',
-} as any);
+        uri: image.uri,
+        name: 'product.jpg',
+        type: 'image/jpeg',
+      } as any);
 
 
-      const res = await fetch(
-        `https://388dd6d89cf6.ngrok-free.app/api/v1/vendor/products/${productId}/images`,
+      const response = await api.post(
+        `/vendor/products/${productId}/images`,
+        formData,
         {
-          method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`,
-            // ❌ DO NOT set Content-Type manually for FormData
+            'Content-Type': 'multipart/form-data', // Let axios/engine handle boundary, but sometimes explicit multipart is safer to indicate intent, though often axios overrides it.
+            // Actually, for React Native FormData, it is often best to NOT set Content-Type so it can set the boundary.
+            // But since our default is application/json, we MUST override it or let axios detect.
+            // Axios usually detects FormData. Let's try undefined to force auto-detection.
+            'Content-Type': 'multipart/form-data',
           },
-          body: formData,
+          transformRequest: (data, headers) => {
+             return data; // Prevent axios from stringifying FormData
+          }
         }
       );
 
-      const text = await res.text();
-console.log('Server response:', text);
-
-      if (!res.ok) {
-        throw new Error(text || 'Image upload failed');
-      }
-
+      // Check success
+      // Note: response.data is the body
+      
       Alert.alert('Success', 'Product added successfully');
 
       // Navigate back to CategoryProducts screen
@@ -93,7 +91,9 @@ console.log('Server response:', text);
         ],
       });
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      console.log('Upload Error', err);
+      const msg = err.response?.data?.message || err.message || 'Image upload failed';
+      Alert.alert('Error', msg);
     } finally {
       setLoading(false);
     }

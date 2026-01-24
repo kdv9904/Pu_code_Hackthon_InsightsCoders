@@ -7,88 +7,47 @@ import {
   Image,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Alert from 'react-native/Libraries/Alert/Alert';
 import { useAuth } from '../context/AuthContext';
-
+import api from '../services/api';
 
 export default function UserAccountScreen() {
   const navigation = useNavigation<any>();
   const [vendor, setVendor] = useState<any>(null);
-const [loading, setLoading] = useState(true);
-const { setIsLoggedIn, setVerificationStatus } = useAuth();
-
-
-const handleLogout = async () => {
-  try {
-    const token = await AsyncStorage.getItem('accessToken');
-
-    // 🔹 Call backend logout API (optional but good practice)
-    if (token) {
-      await fetch(
-        'https://388dd6d89cf6.ngrok-free.app/api/v1/auth/logout',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+  const [loading, setLoading] = useState(true);
+  const { setIsLoggedIn, setVerificationStatus } = useAuth();
+  
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      console.log('Logout API call failed', e);
     }
-
-    // 🔹 Clear local storage
     await AsyncStorage.clear();
-
-    // 🔹 Reset auth state
     setIsLoggedIn(false);
     setVerificationStatus(null);
+    navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+  };
 
-    // 🔹 HARD RESET navigation → Login
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Login' }],
-    });
-
-  } catch (error) {
-    console.error('Logout error:', error);
-    Alert.alert('Error', 'Logout failed. Please try again.');
-  }
-};
-
-
-useEffect(() => {
   const fetchVendor = async () => {
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) return;
-
-      const res = await fetch(
-        'https://388dd6d89cf6.ngrok-free.app/api/v1/vendor/me',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.log('Vendor API error:', text);
-        return;
-      }
-
-      const data = await res.json();
-      setVendor(data);
-    } catch (err) {
-      console.error('Fetch vendor error:', err);
+      const res = await api.get('/vendor/me');
+      setVendor(res.data);
+    } catch (err: any) {
+      console.error('Fetch vendor error:', err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  fetchVendor();
-}, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchVendor();
+    }, [])
+  );
 
   const SettingItem = ({
     icon,

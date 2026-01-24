@@ -1,331 +1,289 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  ScrollView,
-  TouchableOpacity,
-  Image,
   StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  ActivityIndicator,
   Modal,
   TextInput,
+  RefreshControl,
+  StatusBar,
+  Platform,
+  Alert,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RouteProp } from '@react-navigation/native';
-import type { RootStackParamList } from '../../App';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
+import api from '../services/api';
+import { COLORS, FONTS, SHADOWS, SPACING } from '../constants/theme';
+import BottomNavigation from '../components/BottomNavigation';
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'OrderFlow'>;
-type OrderFlowRouteProp = RouteProp<RootStackParamList, 'OrderFlow'>;
-
-interface Product {
-  id: number;
-  name: string;
-  nameHindi: string;
+interface OrderItem {
+  productId: string;
+  productName: string;
   price: number;
-  unit: string;
-  image: string;
-}
-
-interface CartItem extends Product {
   quantity: number;
 }
 
-const products: Product[] = [
-  { id: 1, name: 'Apples', nameHindi: 'सेब', price: 180, unit: 'per kg', image: 'https://images.unsplash.com/photo-1568702846914-96b305d2aaeb?w=300&h=200&fit=crop' },
-  { id: 2, name: 'Bananas', nameHindi: 'केला', price: 60, unit: 'per dozen', image: 'https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=300&h=200&fit=crop' },
-  { id: 3, name: 'Oranges', nameHindi: 'संतरा', price: 120, unit: 'per kg', image: 'https://images.unsplash.com/photo-1582979512210-99b6a53386f9?w=300&h=200&fit=crop' },
-  { id: 4, name: 'Grapes', nameHindi: 'अंगूर', price: 200, unit: 'per kg', image: 'https://images.unsplash.com/photo-1599819177131-f9e4891f5eb0?w=300&h=200&fit=crop' },
-];
+interface Order {
+  orderId: string;
+  items: OrderItem[];
+  totalAmount: number;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'PLACED';
+  houseNumber: string | null;
+  societyName: string | null;
+  phoneNumber: string | null;
+  vendorName: string;
+}
 
 export default function OrderFlowScreen() {
-  const navigation = useNavigation<NavigationProp>();
-  const route = useRoute<OrderFlowRouteProp>();
-  const { vendorId, vendorName } = route.params;
+  const navigation = useNavigation<any>();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [currentStep, setCurrentStep] = useState(1);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  // Reject Modal State
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
-  const addToCart = (product: Product) => {
-    const existingItem = cart.find(item => item.id === product.id);
-    if (existingItem) {
-      setCart(cart.map(item =>
-        item.id === product.id
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ));
-    } else {
-      setCart([...cart, { ...product, quantity: 1 }]);
+  const fetchOrders = async () => {
+    try {
+      const response = await api.get('/vendor/orders');
+      setOrders(response.data);
+    } catch (error: any) {
+      console.error('Fetch orders error:', error);
+      // Alert.alert('Error', 'Failed to fetch orders');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const updateQuantity = (productId: number, delta: number) => {
-    setCart(cart.map(item => {
-      if (item.id === productId) {
-        const newQuantity = item.quantity + delta;
-        return newQuantity > 0 ? { ...item, quantity: newQuantity } : item;
-      }
-      return item;
-    }).filter(item => item.quantity > 0));
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchOrders();
   };
 
-  const removeFromCart = (productId: number) => {
-    setCart(cart.filter(item => item.id !== productId));
+  const handleAccept = async (orderId: string) => {
+    setProcessingId(orderId);
+    try {
+      await api.put(`/vendor/orders/${orderId}/accept`);
+      Alert.alert('Success', 'Order Accepted');
+      fetchOrders(); // Refresh list
+    } catch (error: any) {
+      const msg = error.response?.data?.message || 'Failed to accept order';
+      Alert.alert('Error', msg);
+    } finally {
+      setProcessingId(null);
+    }
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const gst = subtotal * 0.18;
-  const deliveryFee = 40;
-  const total = subtotal + gst + deliveryFee;
+  const openRejectModal = (orderId: string) => {
+    setSelectedOrderId(orderId);
+    setRejectReason('');
+    setRejectModalVisible(true);
+  };
 
-  const handlePlaceOrder = () => {
-    setShowSuccessModal(true);
-    setTimeout(() => {
-      setShowSuccessModal(false);
-      navigation.navigate('Home');
-    }, 2000);
+  const handleReject = async () => {
+    if (!selectedOrderId || !rejectReason.trim()) {
+      Alert.alert('Error', 'Please provide a reason');
+      return;
+    }
+
+    setProcessingId(selectedOrderId);
+    setRejectModalVisible(false); // Close modal immediately
+
+    try {
+      await api.put(`/vendor/orders/${selectedOrderId}/reject`, {
+        reason: rejectReason,
+      });
+      Alert.alert('Success', 'Order Rejected');
+      fetchOrders();
+    } catch (error: any) {
+      console.error(error);
+      const msg = error.response?.data?.message || 'Failed to reject order';
+      Alert.alert('Error', msg);
+    } finally {
+      setProcessingId(null);
+      setSelectedOrderId(null);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ACCEPTED':
+        return COLORS.primary;
+      case 'REJECTED':
+        return COLORS.error;
+      case 'PLACED':
+      case 'PENDING':
+      default:
+        return '#f59e0b'; // Amber for Pending/Placed
+    }
+  };
+
+  const renderOrderCard = ({ item }: { item: Order }) => {
+    const isProcessing = processingId === item.orderId;
+    const isPending = item.status === 'PENDING' || item.status === 'PLACED';
+
+    return (
+      <TouchableOpacity 
+        style={styles.card}
+        onPress={() => navigation.navigate('OrderDetails', { orderId: item.orderId })}
+        activeOpacity={0.9}
+      >
+        {/* Header: ID & Status */}
+        <View style={styles.cardHeader}>
+          <View>
+            <Text style={styles.orderId}>Order #{item.orderId.substring(0, 8)}</Text>
+            <Text style={styles.orderDate}>Today, 10:30 AM</Text> 
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+              {item.status}
+            </Text>
+          </View>
+        </View>
+
+        {/* Divider */}
+        <View style={styles.divider} />
+
+        {/* Items List */}
+        <View style={styles.itemsContainer}>
+          {item.items.map((prod, idx) => (
+            <View key={idx} style={styles.itemRow}>
+              <Text style={styles.itemText}>
+                <Text style={{ fontWeight: 'bold' }}>{prod.quantity}x</Text> {prod.productName}
+              </Text>
+              <Text style={styles.itemPrice}>₹{prod.price * prod.quantity}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Divider */}
+        <View style={styles.divider} />
+
+        {/* Total & Customer Info */}
+        <View style={styles.footerRow}>
+          <View>
+            <Text style={styles.customerInfo}>Total Amount</Text>
+            <Text style={styles.totalAmount}>₹{item.totalAmount}</Text>
+          </View>
+          
+          {/* Action Buttons for Pending Orders */}
+          {isPending ? (
+            <View style={styles.actionButtons}>
+              {isProcessing ? (
+                <ActivityIndicator color={COLORS.primary} />
+              ) : (
+                <>
+                  <TouchableOpacity 
+                    style={[styles.btn, styles.rejectBtn]} 
+                    onPress={() => openRejectModal(item.orderId)}
+                  >
+                    <Ionicons name="close" size={20} color={COLORS.error} />
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.btn, styles.acceptBtn]} 
+                    onPress={() => handleAccept(item.orderId)}
+                  >
+                    <Ionicons name="checkmark" size={20} color={COLORS.white} />
+                    <Text style={styles.acceptText}>Accept</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          ) : (
+            <Ionicons name="chevron-forward" size={24} color={COLORS.subText} />
+          )}
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+
+      {/* Screen Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backIcon}>←</Text>
+        <Text style={styles.headerTitle}>Incoming Orders</Text>
+        <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
+          <Ionicons name="refresh" size={20} color={COLORS.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Place Order</Text>
       </View>
 
-      {/* Step Indicator */}
-      <View style={styles.stepIndicator}>
-        <View style={styles.stepContainer}>
-          <View style={[styles.step, currentStep >= 1 && styles.stepActive]}>
-            <Text style={[styles.stepNumber, currentStep >= 1 && styles.stepNumberActive]}>1</Text>
-          </View>
-          <Text style={styles.stepLabel}>Select Items</Text>
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
-        <View style={styles.stepLine} />
-        <View style={styles.stepContainer}>
-          <View style={[styles.step, currentStep >= 2 && styles.stepActive]}>
-            <Text style={[styles.stepNumber, currentStep >= 2 && styles.stepNumberActive]}>2</Text>
-          </View>
-          <Text style={styles.stepLabel}>Review Cart</Text>
-        </View>
-        <View style={styles.stepLine} />
-        <View style={styles.stepContainer}>
-          <View style={[styles.step, currentStep >= 3 && styles.stepActive]}>
-            <Text style={[styles.stepNumber, currentStep >= 3 && styles.stepNumberActive]}>3</Text>
-          </View>
-          <Text style={styles.stepLabel}>Confirm</Text>
-        </View>
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Step 1: Select Products */}
-        {currentStep === 1 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Select Products from {vendorName}</Text>
-            {products.map((product) => {
-              const cartItem = cart.find(item => item.id === product.id);
-              return (
-                <View key={product.id} style={styles.productCard}>
-                  <Image source={{ uri: product.image }} style={styles.productImage} />
-                  <View style={styles.productInfo}>
-                    <Text style={styles.productName}>
-                      {product.name} / {product.nameHindi}
-                    </Text>
-                    <Text style={styles.productPrice}>₹{product.price} {product.unit}</Text>
-                  </View>
-                  {cartItem ? (
-                    <View style={styles.quantityControl}>
-                      <TouchableOpacity
-                        style={styles.quantityButton}
-                        onPress={() => updateQuantity(product.id, -1)}
-                      >
-                        <Text style={styles.quantityButtonText}>-</Text>
-                      </TouchableOpacity>
-                      <Text style={styles.quantityText}>{cartItem.quantity}</Text>
-                      <TouchableOpacity
-                        style={styles.quantityButton}
-                        onPress={() => updateQuantity(product.id, 1)}
-                      >
-                        <Text style={styles.quantityButtonText}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.addButton}
-                      onPress={() => addToCart(product)}
-                    >
-                      <Text style={styles.addButtonText}>Add</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Step 2: Review Cart */}
-        {currentStep === 2 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Review Your Cart</Text>
-            {cart.map((item) => (
-              <View key={item.id} style={styles.cartItem}>
-                <Image source={{ uri: item.image }} style={styles.cartItemImage} />
-                <View style={styles.cartItemInfo}>
-                  <Text style={styles.cartItemName}>{item.name} / {item.nameHindi}</Text>
-                  <Text style={styles.cartItemPrice}>
-                    ₹{item.price} × {item.quantity} = ₹{item.price * item.quantity}
-                  </Text>
-                </View>
-                <View style={styles.cartItemActions}>
-                  <View style={styles.quantityControl}>
-                    <TouchableOpacity
-                      style={styles.quantityButtonSmall}
-                      onPress={() => updateQuantity(item.id, -1)}
-                    >
-                      <Text style={styles.quantityButtonText}>-</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.quantityText}>{item.quantity}</Text>
-                    <TouchableOpacity
-                      style={styles.quantityButtonSmall}
-                      onPress={() => updateQuantity(item.id, 1)}
-                    >
-                      <Text style={styles.quantityButtonText}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.removeButton}
-                    onPress={() => removeFromCart(item.id)}
-                  >
-                    <Text style={styles.removeButtonText}>🗑️</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Step 3: Confirm Order */}
-        {currentStep === 3 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Order Summary</Text>
-            
-            {/* Delivery Address */}
-            <View style={styles.infoCard}>
-              <Text style={styles.infoCardTitle}>📍 Delivery Address</Text>
-              <Text style={styles.infoCardText}>C-42, Saket, New Delhi - 110017</Text>
+      ) : (
+        <FlatList
+          data={orders}
+          keyExtractor={(item) => item.orderId}
+          renderItem={renderOrderCard}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
+          }
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Ionicons name="receipt-outline" size={64} color={COLORS.subText} />
+              <Text style={styles.emptyText}>No orders yet</Text>
             </View>
+          }
+        />
+      )}
 
-            {/* Contact */}
-            <View style={styles.infoCard}>
-              <Text style={styles.infoCardTitle}>📞 Contact</Text>
-              <Text style={styles.infoCardText}>+91 98765 43210</Text>
-            </View>
-
-            {/* Payment Method */}
-            <View style={styles.infoCard}>
-              <Text style={styles.infoCardTitle}>💳 Payment Method</Text>
-              <Text style={styles.infoCardText}>Cash on Delivery</Text>
-            </View>
-
-            {/* Order Items */}
-            <View style={styles.infoCard}>
-              <Text style={styles.infoCardTitle}>🛒 Order Items</Text>
-              {cart.map((item) => (
-                <View key={item.id} style={styles.summaryItem}>
-                  <Text style={styles.summaryItemText}>
-                    {item.name} × {item.quantity}
-                  </Text>
-                  <Text style={styles.summaryItemPrice}>₹{item.price * item.quantity}</Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Price Breakdown */}
-            <View style={styles.priceCard}>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Subtotal</Text>
-                <Text style={styles.priceValue}>₹{subtotal}</Text>
-              </View>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>GST (18%)</Text>
-                <Text style={styles.priceValue}>₹{gst.toFixed(2)}</Text>
-              </View>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Delivery Fee</Text>
-                <Text style={styles.priceValue}>₹{deliveryFee}</Text>
-              </View>
-              <View style={[styles.priceRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>Total Amount</Text>
-                <Text style={styles.totalValue}>₹{total.toFixed(2)}</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <View style={styles.footerContent}>
-          {cart.length > 0 && (
-            <View style={styles.footerSummary}>
-              <Text style={styles.footerItems}>{cart.length} items</Text>
-              <Text style={styles.footerTotal}>₹{total.toFixed(2)}</Text>
-            </View>
-          )}
-          <View style={styles.footerButtons}>
-            {currentStep > 1 && (
-              <TouchableOpacity
-                style={styles.backStepButton}
-                onPress={() => setCurrentStep(currentStep - 1)}
-              >
-                <Text style={styles.backStepButtonText}>Back</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[
-                styles.nextButton,
-                cart.length === 0 && styles.nextButtonDisabled,
-                currentStep > 1 && styles.nextButtonHalf,
-              ]}
-              onPress={() => {
-                if (currentStep < 3) {
-                  setCurrentStep(currentStep + 1);
-                } else {
-                  handlePlaceOrder();
-                }
-              }}
-              disabled={cart.length === 0}
-            >
-              <Text style={styles.nextButtonText}>
-                {currentStep === 3 ? 'Place Order' : 'Next'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      {/* Success Modal */}
+      {/* Reject Reason Modal */}
       <Modal
-        visible={showSuccessModal}
+        visible={rejectModalVisible}
         transparent
-        animationType="fade"
+        animationType="slide"
+        onRequestClose={() => setRejectModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.successIcon}>✅</Text>
-            <Text style={styles.successTitle}>Order Placed Successfully!</Text>
-            <Text style={styles.successMessage}>Your order will be delivered soon</Text>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Reject Order</Text>
+            <Text style={styles.modalSubtitle}>Please specify a reason for rejection.</Text>
+            
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. Item out of stock"
+              placeholderTextColor={COLORS.subText}
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              multiline
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[styles.modalBtn, styles.cancelBtn]} 
+                onPress={() => setRejectModalVisible(false)}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.modalBtn, styles.confirmRejectBtn]} 
+                onPress={handleReject}
+              >
+                <Text style={styles.confirmRejectText}>Reject</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
+
+      <BottomNavigation currentRoute="Orders" />
     </View>
   );
 }
@@ -333,384 +291,199 @@ export default function OrderFlowScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: COLORS.background,
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 80,
   },
   header: {
-    backgroundColor: '#16a34a',
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACING.l,
+    paddingTop: Platform.OS === 'android' ? SPACING.l : 50,
+    paddingBottom: SPACING.m,
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  backIcon: {
-    fontSize: 28,
-    color: 'white',
-    fontWeight: '700',
+    backgroundColor: COLORS.white,
+    ...SHADOWS.light,
+    zIndex: 10,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#270000',
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: COLORS.text,
   },
-  stepIndicator: {
+  refreshBtn: {
+    padding: SPACING.s,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 8,
+  },
+  listContent: {
+    padding: SPACING.m,
+    paddingBottom: 100,
+  },
+  emptyText: {
+    marginTop: SPACING.m,
+    color: COLORS.subText,
+    fontSize: 16,
+  },
+  
+  /* Card Styles */
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: SPACING.m,
+    marginBottom: SPACING.m,
+    ...SHADOWS.light,
+  },
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 16,
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    alignItems: 'flex-start',
   },
-  stepContainer: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  step: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#e2e8f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  stepActive: {
-    backgroundColor: '#16a34a',
-  },
-  stepNumber: {
+  orderId: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#64748b',
+    fontWeight: 'bold',
+    color: COLORS.text,
   },
-  stepNumberActive: {
-    color: 'white',
+  orderDate: {
+    fontSize: 12,
+    color: COLORS.subText,
+    marginTop: 2,
   },
-  stepLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  stepLine: {
-    height: 2,
-    backgroundColor: '#e2e8f0',
-    flex: 0.3,
-    marginHorizontal: 8,
-  },
-  content: {
-    flex: 1,
-  },
-  section: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 16,
-  },
-  productCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    marginBottom: 12,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  productImage: {
-    width: 80,
-    height: 80,
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
   },
-  productInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  productName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 6,
-  },
-  productPrice: {
-    fontSize: 18,
+  statusText: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#16a34a',
   },
-  quantityControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: SPACING.m,
   },
-  quantityButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#16a34a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  quantityButtonSmall: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#16a34a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  quantityButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: 'white',
-  },
-  quantityText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1e293b',
-    minWidth: 24,
-    textAlign: 'center',
-  },
-  addButton: {
-    backgroundColor: '#16a34a',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: 'white',
-  },
-  cartItem: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    marginBottom: 12,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  cartItemImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-  },
-  cartItemInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  cartItemName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  cartItemPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#16a34a',
-  },
-  cartItemActions: {
+  itemsContainer: {
     gap: 8,
   },
-  removeButton: {
-    alignSelf: 'center',
-    padding: 4,
-  },
-  removeButtonText: {
-    fontSize: 18,
-  },
-  infoCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  infoCardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 8,
-  },
-  infoCardText: {
-    fontSize: 14,
-    color: '#64748b',
-  },
-  summaryItem: {
+  itemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 4,
   },
-  summaryItemText: {
+  itemText: {
     fontSize: 14,
-    color: '#64748b',
-  },
-  summaryItemPrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  priceCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  priceLabel: {
-    fontSize: 14,
-    color: '#64748b',
-  },
-  priceValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  totalRow: {
-    borderTopWidth: 2,
-    borderTopColor: '#e2e8f0',
-    marginTop: 8,
-    paddingTop: 12,
-  },
-  totalLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-  },
-  totalValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#16a34a',
-  },
-  footer: {
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  footerContent: {
-    padding: 16,
-  },
-  footerSummary: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  footerItems: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  footerTotal: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#16a34a',
-  },
-  footerButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  backStepButton: {
+    color: COLORS.text,
     flex: 1,
-    backgroundColor: '#e2e8f0',
-    paddingVertical: 16,
-    borderRadius: 12,
+  },
+  itemPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  backStepButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#64748b',
+  customerInfo: {
+    fontSize: 12,
+    color: COLORS.subText,
   },
-  nextButton: {
-    flex: 1,
-    backgroundColor: '#16a34a',
-    paddingVertical: 16,
+  totalAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  
+  actionButtons: {
+    flexDirection: 'row',
+    gap: SPACING.s,
+  },
+  btn: {
+    height: 40,
     borderRadius: 12,
-    alignItems: 'center',
-  },
-  nextButtonHalf: {
-    flex: 1,
-  },
-  nextButtonDisabled: {
-    backgroundColor: '#94a3b8',
-  },
-  nextButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: 'white',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    flexDirection: 'row',
+    ...SHADOWS.light,
   },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 32,
-    alignItems: 'center',
-    minWidth: 280,
+  rejectBtn: {
+    width: 40,
+    backgroundColor: '#fee2e2',
   },
-  successIcon: {
-    fontSize: 64,
-    marginBottom: 16,
+  acceptBtn: {
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.primary,
+    gap: 4,
   },
-  successTitle: {
+  acceptText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+
+  /* Modal Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: SPACING.l,
+  },
+  modalContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: SPACING.l,
+    ...SHADOWS.strong,
+  },
+  modalTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
+    fontWeight: 'bold',
+    color: COLORS.text,
     marginBottom: 8,
   },
-  successMessage: {
+  modalSubtitle: {
     fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
+    color: COLORS.subText,
+    marginBottom: SPACING.m,
+  },
+  input: {
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: SPACING.m,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    color: COLORS.text,
+    marginBottom: SPACING.l,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: SPACING.m,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelBtn: {
+    backgroundColor: COLORS.background,
+  },
+  confirmRejectBtn: {
+    backgroundColor: COLORS.error,
+  },
+  cancelText: {
+    color: COLORS.text,
+    fontWeight: '600',
+  },
+  confirmRejectText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
   },
 });

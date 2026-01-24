@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Platform, Animated } from 'react-native';
 import { useNavigation, useNavigationState } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../../App';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { COLORS, SHADOWS, SPACING, FONTS } from '../constants/theme';
+import { AppStackParamList } from '../navigation/AppStack';
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type NavigationProp = NativeStackNavigationProp<AppStackParamList>;
 
 interface BottomNavigationProps {
   currentRoute?: string;
@@ -12,40 +14,47 @@ interface BottomNavigationProps {
 
 export default function BottomNavigation({ currentRoute }: BottomNavigationProps) {
   const navigation = useNavigation<NavigationProp>();
-  const routeName = useNavigationState(state => 
-    state?.routes[state.index]?.name
-  ) || currentRoute || 'Home';
+  
+  // Get current route name
+  const state = useNavigationState(state => state);
+  const activeRouteName = state ? state.routes[state.index].name : (currentRoute || 'Home');
 
   const navItems = [
-    { route: 'Home', icon: '🏠', label: 'Home' },
-    { route: 'Orders', icon: '📦', label: 'Orders' },
-    { route: 'UserAccount', icon: '👤', label: 'Profile' },
+    { route: 'Home', icon: 'home-outline', activeIcon: 'home', label: 'Home' },
+    { route: 'Orders', icon: 'list-outline', activeIcon: 'list', label: 'Orders' }, // Maps to OrderFlow/UserAccount logic
+    { route: 'UserAccount', icon: 'person-outline', activeIcon: 'person', label: 'Profile' },
   ];
 
   const handlePress = (route: string) => {
     if (route === 'Orders') {
-      // Navigate to UserAccount and set tab to orders
-      navigation.navigate('UserAccount');
+      // Logic for Orders tab - seemingly mapped to specific screen or UserAccount
+      // For now, keeping existing logic but maybe direct to OrderFlow if that's the intention
+      navigation.navigate('OrderFlow', { vendorId: 0, vendorName: 'Me' }); 
     } else if (route === 'UserAccount' || route === 'Home') {
-      navigation.navigate(route as 'Home' | 'UserAccount');
+      navigation.navigate(route as any);
     }
   };
 
   return (
     <View style={styles.container}>
       {navItems.map((item) => {
-        const isActive = routeName === item.route || 
-          (item.route === 'Orders' && routeName === 'UserAccount');
+        const isActive = activeRouteName === item.route || 
+          (item.route === 'Orders' && activeRouteName === 'OrderFlow'); // Update active logic
         
         return (
           <TouchableOpacity
             key={item.route}
             style={styles.navItem}
+            activeOpacity={0.7}
             onPress={() => handlePress(item.route)}
           >
-            <Text style={[styles.icon, isActive && styles.iconActive]}>
-              {item.icon}
-            </Text>
+            <View style={[styles.iconContainer, isActive && styles.iconActiveContainer]}>
+              <Ionicons
+                name={isActive ? item.activeIcon : item.icon}
+                size={24}
+                color={isActive ? COLORS.primary : COLORS.subText}
+              />
+            </View>
             <Text style={[styles.label, isActive && styles.labelActive]}>
               {item.label}
             </Text>
@@ -59,37 +68,40 @@ export default function BottomNavigation({ currentRoute }: BottomNavigationProps
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    paddingBottom: 10,
-    paddingTop: 8,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    backgroundColor: COLORS.card,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 12,
+    paddingTop: 12,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    ...SHADOWS.strong,
+    borderTopWidth: 0, // removed default border
   },
   navItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
   },
-  icon: {
-    fontSize: 24,
-    marginBottom: 4,
-    opacity: 0.5,
+  iconContainer: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    marginBottom: 2,
   },
-  iconActive: {
-    opacity: 1,
+  iconActiveContainer: {
+    backgroundColor: COLORS.primaryLight,
   },
   label: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
+    fontSize: 10,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.subText,
+    marginTop: 2,
   },
   labelActive: {
-    color: '#16a34a',
+    color: COLORS.primary,
   },
 });
+

@@ -6,7 +6,15 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  ActivityIndicator,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import api from '../../services/api';
+import { COLORS, FONTS, SHADOWS, SPACING } from '../../constants/theme';
 
 export default function SignupScreen({ navigation }: any) {
   const [firstName, setFirstName] = useState('');
@@ -14,159 +22,212 @@ export default function SignupScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [image, setImage] = useState(''); // STRING as backend expects
+  const [image, setImage] = useState(''); 
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSignup = async () => {
-    if (
-      !firstName ||
-      !lastName ||
-      !email ||
-      !password ||
-      !phoneNumber ||
-      !image
-    ) {
+    if (!firstName || !lastName || !email || !password || !phoneNumber || !image) {
       Alert.alert('Error', 'All fields are required');
       return;
     }
 
     try {
-      const response = await fetch(
-        'https://388dd6d89cf6.ngrok-free.app/api/v1/auth/signup',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            firstName,
-            lastName,
-            email,
-            password,
-            phoneNumber,
-            image, // STRING (URL / filename / base64)
-          }),
-        }
-      );
+      setLoading(true);
+      const response = await api.post('/auth/signup', {
+        firstName,
+        lastName,
+        email,
+        password,
+        phoneNumber,
+        image,
+      });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert('Signup Failed', data.message || 'Something went wrong');
+      const data = response.data;
+      if (!data && !response.status) { 
+        Alert.alert('Signup Failed', 'Something went wrong');
         return;
       }
 
-      Alert.alert('Success', 'OTP sent to your email');
+      Alert.alert('Success', 'Account created! Please verify OTP sent to your email.');
       navigation.navigate('Otp', { email });
-    } catch (error) {
-      Alert.alert('Error', 'Unable to signup. Try again.');
+    } catch (error: any) {
       console.error(error);
+      const msg = error.response?.data?.message || 'Unable to signup. Try again.';
+      Alert.alert('Error', msg);
+    } finally {
+      setLoading(false);
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.appName}>Vendor Delivery Partner</Text>
-      <Text style={styles.subtitle}>Create Account</Text>
-
-      <TextInput
-        placeholder="First Name *"
-        value={firstName}
-        onChangeText={setFirstName}
-        style={styles.input}
-      />
-
-      <TextInput
-        placeholder="Last Name *"
-        value={lastName}
-        onChangeText={setLastName}
-        style={styles.input}
-      />
-
-      <TextInput
-        placeholder="Email Address *"
-        value={email}
-        onChangeText={setEmail}
-        style={styles.input}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-
-      <TextInput
-        placeholder="Password *"
-        value={password}
-        onChangeText={setPassword}
-        style={styles.input}
-        secureTextEntry
-      />
-
-      <TextInput
-        placeholder="Phone Number *"
-        value={phoneNumber}
-        onChangeText={setPhoneNumber}
-        style={styles.input}
-        keyboardType="phone-pad"
-        maxLength={10}
-      />
-
-      {/* IMAGE AS STRING */}
-      <TextInput
-        placeholder="Image URL / Image String *"
-        value={image}
-        onChangeText={setImage}
-        style={styles.input}
-      />
-
-      <TouchableOpacity style={styles.button} onPress={handleSignup}>
-        <Text style={styles.buttonText}>Register & Send OTP</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => navigation.goBack()}>
-        <Text style={styles.link}>Already have an account?</Text>
-      </TouchableOpacity>
+  const renderInput = (
+    label: string, 
+    value: string, 
+    setValue: (t: string) => void, 
+    icon: string, 
+    placeholder: string,
+    isSecure = false,
+    keyboardType: any = 'default'
+  ) => (
+    <View style={styles.inputWrapper}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.inputBox}>
+        <Ionicons name={icon} size={20} color={COLORS.subText} style={{ marginRight: 10 }} />
+        <TextInput
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.subText}
+          value={value}
+          onChangeText={setValue}
+          style={styles.input}
+          secureTextEntry={isSecure && !showPassword}
+          keyboardType={keyboardType}
+          autoCapitalize="none"
+        />
+        {isSecure && (
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+             <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={COLORS.subText} />
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
+  );
+
+  return (
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={{ flex: 1, backgroundColor: COLORS.background }}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      
+      {/* Header with Back Button */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        <View style={styles.titleContainer}>
+          <Text style={styles.welcomeText}>Create Account</Text>
+          <Text style={styles.subText}>Join us and start selling today</Text>
+        </View>
+
+        <View style={styles.formContainer}>
+          <View style={{ flexDirection: 'row', gap: SPACING.m }}>
+            <View style={{ flex: 1 }}>
+              {renderInput("First Name", firstName, setFirstName, "person-outline", "John")}
+            </View>
+            <View style={{ flex: 1 }}>
+              {renderInput("Last Name", lastName, setLastName, "person-outline", "Doe")}
+            </View>
+          </View>
+
+          {renderInput("Email Address", email, setEmail, "mail-outline", "john@example.com", false, 'email-address')}
+          {renderInput("Password", password, setPassword, "lock-closed-outline", "Min. 6 characters", true)}
+          {renderInput("Phone Number", phoneNumber, setPhoneNumber, "call-outline", "1234567890", false, 'phone-pad')}
+          {renderInput("Profile Image URL", image, setImage, "image-outline", "https://example.com/me.jpg")}
+
+          <TouchableOpacity style={styles.signupBtn} onPress={handleSignup} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : (
+              <Text style={styles.signupBtnText}>Sign Up</Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.loginContainer}>
+             <Text style={{ color: COLORS.subText }}>Already have an account? </Text>
+             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+               <Text style={styles.loginText}>Log In</Text>
+             </TouchableOpacity>
+          </View>
+        </View>
+
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  header: {
+    paddingHorizontal: SPACING.l,
+    paddingTop: Platform.OS === 'android' ? SPACING.l : 50,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
     justifyContent: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
   },
-  appName: {
-    fontSize: 32,
+  scrollContent: {
+    padding: SPACING.l,
+    paddingBottom: 50,
+  },
+  titleContainer: {
+    marginBottom: SPACING.l,
+  },
+  welcomeText: {
+    fontSize: 28,
     fontWeight: 'bold',
-    textAlign: 'center',
-    color: '#16a34a',
-    marginBottom: 4,
+    color: COLORS.text,
+    marginBottom: SPACING.s,
   },
-  subtitle: {
+  subText: {
     fontSize: 16,
-    textAlign: 'center',
-    color: '#666',
-    marginBottom: 20,
+    color: COLORS.subText,
+  },
+  formContainer: {
+    marginTop: SPACING.m,
+  },
+  inputWrapper: {
+    marginBottom: SPACING.l,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: SPACING.s,
+  },
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: SPACING.m,
+    height: 50,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 16,
   },
-  button: {
-    backgroundColor: '#16a34a',
-    padding: 14,
-    borderRadius: 8,
+  signupBtn: {
+    backgroundColor: COLORS.primary,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACING.s,
+    marginBottom: SPACING.l,
+    ...SHADOWS.medium,
   },
-  buttonText: {
-    color: '#fff',
-    textAlign: 'center',
+  signupBtnText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  loginContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  loginText: {
+    color: COLORS.primary,
     fontWeight: 'bold',
   },
-  link: {
-    textAlign: 'center',
-    marginTop: 15,
-    color: '#16a34a',
-  },
 });
+
