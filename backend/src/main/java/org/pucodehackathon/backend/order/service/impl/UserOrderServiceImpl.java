@@ -1,6 +1,7 @@
 package org.pucodehackathon.backend.order.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.pucodehackathon.backend.auth.model.User;
 import org.pucodehackathon.backend.order.dto.order.*;
 import org.pucodehackathon.backend.order.model.Order;
 import org.pucodehackathon.backend.order.model.OrderStatus;
@@ -24,17 +25,22 @@ public class UserOrderServiceImpl implements UserOrderService {
     private final org.pucodehackathon.backend.auth.repositories.UserRepository userRepository;
 
     @Override
+    @Transactional(readOnly = true)
     public OrderDetailsResponseDto getOrderDetails(UUID userId, UUID orderId) {
 
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found"));
 
-        if (!order.getUser().getId().equals(userId)) {
+        // Authorization check
+        boolean isCustomer = order.getUser().getId().equals(userId);
+        boolean isVendor = order.getVendor().getUserId().equals(userId);
+
+        if (!isCustomer && !isVendor) {
             throw new AccessDeniedException("Unauthorized access to order");
         }
 
-        // Fetch vendor's user to get phone number
-        org.pucodehackathon.backend.auth.model.User vendorUser = userRepository.findById(order.getVendor().getUserId())
+        // Fetch vendor user (owner of vendor)
+        User vendorUser = userRepository.findById(order.getVendor().getUserId())
                 .orElse(null);
 
         VendorSummaryDto vendor = VendorSummaryDto.builder()
@@ -43,18 +49,28 @@ public class UserOrderServiceImpl implements UserOrderService {
                 .phone(vendorUser != null ? vendorUser.getPhoneNumber() : null)
                 .build();
 
+        // Customer phone fallback logic
+        String customerPhone = order.getUser().getPhoneNumber();
+
         UserAddressDto address = UserAddressDto.builder()
                 .addressLine(order.getDeliveryAddress())
-                .phone(order.getDeliveryPhone())
+                .phone(
+                        order.getDeliveryPhone() != null
+                                ? order.getDeliveryPhone()
+                                : customerPhone
+                )
                 .build();
 
         List<OrderItemDto> items = order.getItems().stream()
-                .map(i -> OrderItemDto.builder()
-                        .productId(i.getProduct().getProductId())
-                        .productName(i.getProduct().getName())
-                        .quantity(i.getQuantity())
-                        .price(i.getPrice())
-                        .total(i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+                .map(item -> OrderItemDto.builder()
+                        .productId(item.getProduct().getProductId())
+                        .productName(item.getProduct().getName())
+                        .quantity(item.getQuantity())
+                        .price(item.getPrice())
+                        .total(
+                                item.getPrice()
+                                        .multiply(BigDecimal.valueOf(item.getQuantity()))
+                        )
                         .build())
                 .toList();
 
@@ -65,7 +81,11 @@ public class UserOrderServiceImpl implements UserOrderService {
                 .deliveryAddress(address)
                 .items(items)
                 .totalAmount(order.getTotalAmount())
-                .paymentMethod(order.getPaymentMethod().name())
+                .paymentMethod(
+                        order.getPaymentMethod() != null
+                                ? order.getPaymentMethod().name()
+                                : null
+                )
                 .createdAt(order.getCreatedAt())
                 .acceptedAt(order.getAcceptedAt())
                 .outForDeliveryAt(order.getOutForDeliveryAt())
@@ -73,4 +93,5 @@ public class UserOrderServiceImpl implements UserOrderService {
                 .completedAt(order.getCompletedAt())
                 .build();
     }
+
 }

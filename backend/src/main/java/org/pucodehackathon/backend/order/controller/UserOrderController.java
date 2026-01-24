@@ -22,7 +22,7 @@ import java.util.UUID;
 public class UserOrderController {
 
     private final OrderService orderService;
-    private final UserOrderService userOrderService;
+
 
     @PostMapping("/place")
     public ResponseEntity<OrderResponseDto> placeOrder(
@@ -41,17 +41,5 @@ public class UserOrderController {
         return ResponseEntity.ok(orderService.getUserOrders(principal.getUser().getId()));
     }
 
-    @GetMapping("/{orderId}")
-    public ResponseEntity<OrderDetailsResponseDto> getOrderDetails(
-            Authentication authentication,
-            @PathVariable UUID orderId
-    ) {
-        UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
-        return ResponseEntity.ok(
-                userOrderService.getOrderDetails(
-                        principal.getUser().getId(),
-                        orderId
-                )
-        );
-    }
+
 }
