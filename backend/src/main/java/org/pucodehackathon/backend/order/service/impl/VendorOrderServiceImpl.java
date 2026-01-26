@@ -134,6 +134,9 @@ public class VendorOrderServiceImpl implements VendorOrderService {
                 .vendorName(order.getVendor().getBusinessName())
                 .status(order.getStatus())
                 .totalAmount(order.getTotalAmount())
+                .societyName(order.getSocietyName())
+                .houseNumber(order.getHouseNumber())
+                .phoneNumber(order.getPhoneNumber())
                 .deliveryLatitude(order.getDeliveryLatitude())
                 .deliveryLongitude(order.getDeliveryLongitude())
                 .items(

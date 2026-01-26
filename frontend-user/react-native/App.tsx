@@ -7,7 +7,12 @@ import AppStack from './src/navigation/AppStack';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 
 function RootNavigator() {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return null; // or a loading spinner component
+  }
+  
   return isLoggedIn ? <AppStack /> : <AuthStack />;
 }
 

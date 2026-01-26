@@ -5,11 +5,14 @@ type VerificationStatus = 'PENDING' | 'APPROVED' | null;
 
 type AuthContextType = {
   isLoggedIn: boolean;
+  isLoading: boolean;
   token: string | null;
   verificationStatus: VerificationStatus;
+  userRoles: string[]; // Added userRoles
   setIsLoggedIn: (v: boolean) => void;
   setToken: (t: string | null) => void;
   setVerificationStatus: (v: VerificationStatus) => void;
+  setUserRoles: (roles: string[]) => void; // Added setter
   logout: () => Promise<void>;
 };
 
@@ -17,26 +20,38 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: any) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
   const [verificationStatus, setVerificationStatus] =
     useState<VerificationStatus>(null);
+  const [userRoles, setUserRoles] = useState<string[]>([]); // Init empty
 
   useEffect(() => {
     const initAuth = async () => {
-      const storedToken = await AsyncStorage.getItem('accessToken');
-      const loginTime = await AsyncStorage.getItem('loginTime');
-      const status = await AsyncStorage.getItem('verificationStatus');
+      try {
+        const storedToken = await AsyncStorage.getItem('accessToken');
+        const status = await AsyncStorage.getItem('verificationStatus');
+        const rolesString = await AsyncStorage.getItem('userRoles'); // Read roles
 
-      if (!storedToken || !loginTime) return;
-
-      const diff = Date.now() - Number(loginTime);
-
-      if (diff < 3600 * 1000) {
-        setToken(storedToken);
-        setVerificationStatus(status as VerificationStatus);
-        setIsLoggedIn(true);
-      } else {
-        await logout();
+        if (storedToken) {
+          setToken(storedToken);
+          setVerificationStatus(status as VerificationStatus);
+          
+          if (rolesString) {
+            try {
+              const roles = JSON.parse(rolesString);
+              setUserRoles(roles);
+            } catch (e) {
+              console.log('Error parsing roles', e);
+            }
+          }
+          
+          setIsLoggedIn(true);
+        }
+      } catch (e) {
+        console.error('Auth initialization error:', e);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -48,17 +63,21 @@ export const AuthProvider = ({ children }: any) => {
     setIsLoggedIn(false);
     setToken(null);
     setVerificationStatus(null);
+    setUserRoles([]);
   };
 
   return (
     <AuthContext.Provider
       value={{
         isLoggedIn,
+        isLoading,
         token,
         verificationStatus,
+        userRoles,
         setIsLoggedIn,
         setToken,
         setVerificationStatus,
+        setUserRoles,
         logout,
       }}
     >
