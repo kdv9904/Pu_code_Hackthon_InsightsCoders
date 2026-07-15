@@ -205,6 +205,8 @@ A custom **RAG-based chatbot** was developed to answer customer questions based 
 
 ## 📬 Contact
 If you want to collaborate or have questions about this project, feel free to connect:
+**Heramb Chaudhari**  
+LinkedIn: https://www.linkedin.com/in/heramb-chaudhari-83a01821a/
 
 **Ayush Singh**  
 LinkedIn: https://www.linkedin.com/in/ayush-singh-aiml/
